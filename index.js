@@ -4,58 +4,70 @@ const record = require('node-record-lpcm16');
 const axios = require('axios');
 const queryGpt = require('./gpt.js').queryGpt;
 
-const ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-50dB:d=1', '-f', 'null', '-']);
+const devices = ["BlackHole 16ch","default"];
 
-let file;
-let recording;
-let audioStream;
+class AudioRecorder {
+    constructor(device) {
+        console.log(device);
+        this.device = device;
+        this.fileName = "audio";
+        this.fileNum = 0;
+        this.file = null;
+        this.recording = null;
+        this.audioStream = null;
+        this.ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-30dB:d=1', '-f', 'null', '-']);
+    }
 
-const fileName = "audio";
-let fileNum = 0;
+    init() {
+        this.ffmpeg.stderr.on('data', this.handleFFmpegOutput.bind(this));
+        this.ffmpeg.on('close', this.handleFFmpegClose.bind(this));
+        this.detectRecording = record.record({
+            sampleRate: 20000,
+            device: this.device
+        }).stream().pipe(this.ffmpeg.stdin);
+        this.startRecording();
+    }
 
-const detectRecording = record.record({
-    sampleRate: 20000,
-    device: "BlackHole 16ch"
-}).stream().pipe(ffmpeg.stdin);
+    startRecording() {
+        this.fileNum++;
+        console.log(`Started new recording ${this.fileName}${this.fileNum}_${this.device}.wav`);
+        this.file = fs.createWriteStream(`${this.fileName}${this.fileNum}_${this.device}.wav`, { encoding: 'binary' });
+        this.recording = record.record({
+            sampleRate: 20000,
+            verbose: true,
+            device: this.device
+        });
+        this.audioStream = this.recording.stream();
+        this.audioStream.pipe(this.file);
+    }
 
-function startRecording() {
-    fileNum++;
-    console.log(`Started new recording ${fileName}${fileNum}.wav`);
-    file = fs.createWriteStream(`${fileName}${fileNum}.wav`, { encoding: 'binary' });
-    recording = record.record({
-        sampleRate: 20000,
-        device: "BlackHole 16ch"
-    });
-    audioStream = recording.stream();
-    audioStream.pipe(file);
-}
+    stopRecording() {
+        this.audioStream.unpipe(this.file);
+        this.audioStream.end();
+        this.file.end();
+        this.recording.stop();
+    }
 
-function stopRecording() {
-    audioStream.unpipe(file);
-    audioStream.end();
-    file.end();
-    recording.stop();
-}
+    async onSilenceDetected() {
+        this.stopRecording();
+        this.startRecording();
+        transcribeAudio(this.device, `${this.fileName}${this.fileNum-1}_${this.device}.wav`);
+    }
 
-function onSilenceDetected() {
-    stopRecording();
-    transcribeAudio(`${fileName}${fileNum}.wav`);
-    startRecording();
-}
-
-function handleFFmpegOutput(data) {
-    console.log(`${data}`);
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-        if (line.includes('silence_start')) {
-            onSilenceDetected();
-            break;
+    handleFFmpegOutput(data) {
+        // console.log(`Output : ${data}`);
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+            if (line.includes('silence_start')) {
+                this.onSilenceDetected();
+                break;
+            }
         }
     }
-}
 
-function handleFFmpegClose(code) {
-    console.log(`ffmpeg process exited with code ${code}`);
+    handleFFmpegClose(code) {
+        console.log(`ffmpeg process exited with code ${code}`);
+    }
 }
 
 async function evaluateCommand(command) {
@@ -75,32 +87,41 @@ function stripBrackets(line) {
     return line.toString().replace(/\[.*\]/g, '').replace(/\n/g, ' ');
 }
 
-async function transcribeAudio(filename) {
-    const command = `whisper ${filename} --model tiny.en --language English --fp16 False --output_dir ./trash`;
+async function transcribeAudio(device, filename) {
+    const command = `whisper "${filename}" --model tiny.en --language English --fp16 False --output_dir ./trash`;
     const transcription = await evaluateCommand(command);
     const stripped = stripBrackets(transcription);
-    console.log(stripped);
-    // Send the message to ChatGPT API
-    sendToChatGPT(stripped);
+    console.log(`${device} :  ${stripped}`);
+    storeMessage(device, stripped);
 }
 
-function init() {
-    startRecording();
-    ffmpeg.stderr.on('data', handleFFmpegOutput);
-    ffmpeg.on('close', handleFFmpegClose);
+function storeMessage(device, message) {
+    if(device == "BlackHole 16ch"){
+        // Send the message to ChatGPT API
+        var interviewerMessage = { 'role': 'user', 'name': 'Interviewer','content': message };
+        messageHistory.push(interviewerMessage);
+        // sendToChatGPT();
+    } else {
+        var interviewerMessage = { 'role': 'user', 'name': 'Chris', 'content': message };
+        messageHistory.push(interviewerMessage);
+    }
 }
 
-const current_date =  new Date().toLocaleString();
-const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. Your primary directive is to output whatever you think would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. Respond as briefly as possible. Current date: ${current_date}`};
-var messageHistory = [];
-
-async function sendToChatGPT(text) {
-    var interviewerMessage = { 'role': 'user', 'content': text};
-    messageHistory.push(interviewerMessage);
+async function sendToChatGPT() {
     var response = await queryGpt([systemMsg].concat(messageHistory));
-    var userMessage = { 'role': 'assistant', 'content': response};
-    messageHistory.push(userMessage);
     console.log(response);
 }
 
-init();
+const current_date = new Date().toLocaleString();
+const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. Your primary directive is to output whatever you think would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. Respond as briefly as possible. Current date: ${current_date}` };
+var messageHistory = [];
+
+function main() {
+    devices.forEach(device => {
+        var devRec = new AudioRecorder(device);
+        devRec.init();
+    });
+}
+
+main();
+
