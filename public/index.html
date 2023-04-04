@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Interview Transcript</title>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <h1>Interview Transcript</h1>
+  <div id="transcript"></div>
+
+  <script>
+    // Connect to the socket.io server
+    const socket = io();
+
+    // Update the transcript whenever there is new data from the server
+    socket.on('update', (data) => {
+      const { messageHistory, response } = data;
+      const transcript = document.getElementById('transcript');
+      transcript.innerHTML = '';
+
+      // Display messageHistory
+      messageHistory.forEach(message => {
+        const messageElement = document.createElement('p');
+        messageElement.textContent = `${message.name}: ${message.content}`;
+        transcript.appendChild(messageElement);
+      });
+
+      // Display response from queryGpt
+      if (response) {
+        const responseElement = document.createElement('p');
+        responseElement.textContent = `ChatGPT: ${response}`;
+        transcript.appendChild(responseElement);
+      }
+    });
+  </script>
+</body>
+</html>

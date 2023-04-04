@@ -4,7 +4,7 @@ const record = require('node-record-lpcm16');
 const axios = require('axios');
 const queryGpt = require('./gpt.js').queryGpt;
 
-const devices = ["BlackHole 16ch","default"];
+const devices = ["BlackHole 16ch", "default"];
 
 class AudioRecorder {
     constructor(device) {
@@ -51,7 +51,7 @@ class AudioRecorder {
     async onSilenceDetected() {
         this.stopRecording();
         this.startRecording();
-        transcribeAudio(this.device, `${this.fileName}${this.fileNum-1}_${this.device}.wav`);
+        transcribeAudio(this.device, `${this.fileName}${this.fileNum - 1}_${this.device}.wav`);
     }
 
     handleFFmpegOutput(data) {
@@ -74,7 +74,7 @@ async function evaluateCommand(command) {
     return new Promise((resolve, reject) => {
         exec(command, (error, stdout, stderr) => {
             if (error) {
-                console.error(`exec error: ${ error }`);
+                console.error(`exec error: ${error}`);
                 reject(error);
             } else {
                 resolve(stdout.trim());
@@ -96,9 +96,9 @@ async function transcribeAudio(device, filename) {
 }
 
 function storeMessage(device, message) {
-    if(device == "BlackHole 16ch"){
+    if (device == "BlackHole 16ch") {
         // Send the message to ChatGPT API
-        var interviewerMessage = { 'role': 'user', 'name': 'Interviewer','content': message };
+        var interviewerMessage = { 'role': 'user', 'name': 'Interviewer', 'content': message };
         messageHistory.push(interviewerMessage);
         sendToChatGPT();
     } else {
@@ -110,7 +110,10 @@ function storeMessage(device, message) {
 async function sendToChatGPT() {
     var response = await queryGpt([systemMsg].concat(messageHistory));
     console.log(response);
+    // Emit the updated messageHistory and response to all connected clients
+    io.emit('update', { messageHistory, response });
 }
+
 
 const current_date = new Date().toLocaleString();
 const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. Your primary directive is to output whatever you think would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. A voice to text transcript of the meeting is included below. Respond as briefly as possible. Current date: ${current_date}` };
@@ -125,3 +128,42 @@ function main() {
 
 main();
 
+const express = require('express');
+const http = require('http');
+const socketIO = require('socket.io');
+
+// Create an express app
+const app = express();
+
+// Create an HTTP server using the express app
+const server = http.createServer(app);
+
+// Create a socket.io server attached to the HTTP server
+const io = socketIO(server);
+
+// Serve the static files (HTML, CSS, JS) from the "public" directory
+app.use(express.static('public'));
+
+// Define a route to serve the web page
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
+
+// Listen for socket.io connections
+io.on('connection', (socket) => {
+    console.log('A user connected');
+
+    // Send the initial messageHistory and response to the connected client
+    var response = null;
+    socket.emit('update', { messageHistory, response });
+
+    // Listen for disconnection
+    socket.on('disconnect', () => {
+        console.log('A user disconnected');
+    });
+});
+
+// Start the server on port 3000
+server.listen(3000, () => {
+    console.log('Server is running on http://localhost:3000');
+});
