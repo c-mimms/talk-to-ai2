@@ -100,7 +100,7 @@ function storeMessage(device, message) {
         // Send the message to ChatGPT API
         var interviewerMessage = { 'role': 'user', 'name': 'Interviewer','content': message };
         messageHistory.push(interviewerMessage);
-        // sendToChatGPT();
+        sendToChatGPT();
     } else {
         var interviewerMessage = { 'role': 'user', 'name': 'Chris', 'content': message };
         messageHistory.push(interviewerMessage);
@@ -113,7 +113,7 @@ async function sendToChatGPT() {
 }
 
 const current_date = new Date().toLocaleString();
-const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. Your primary directive is to output whatever you think would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. Respond as briefly as possible. Current date: ${current_date}` };
+const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. Your primary directive is to output whatever you think would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. A voice to text transcript of the meeting is included below. Respond as briefly as possible. Current date: ${current_date}` };
 var messageHistory = [];
 
 function main() {
