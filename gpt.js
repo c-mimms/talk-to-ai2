@@ -6,7 +6,7 @@ let fetch;
 
 async function queryGpt(messages) {
   return gpt(messages, 'gpt-3.5-turbo', 0.7, 1000);
-  // return gpt(messages, 'gpt-4', 0.7, 1000);
+  // return gpt(messages, 'gpt-4', 0.7, 500);
 }
 
 async function gpt(messages, model, temperature, maxTokens) {
