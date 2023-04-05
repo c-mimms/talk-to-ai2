@@ -4,6 +4,7 @@ const record = require('node-record-lpcm16');
 const axios = require('axios');
 const queryGpt = require('./gpt.js').queryGpt;
 
+
 const devices = ["BlackHole 16ch", "default"];
 
 class AudioRecorder {
@@ -15,14 +16,18 @@ class AudioRecorder {
         this.file = null;
         this.recording = null;
         this.audioStream = null;
-        this.ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-30dB:d=1', '-f', 'null', '-']);
+        if (device === "BlackHole 16ch") {
+            this.ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-50dB:d=1', '-f', 'null', '-']);
+        } else {
+            this.ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-30dB:d=1', '-f', 'null', '-']);
+        }
     }
 
     init() {
         this.ffmpeg.stderr.on('data', this.handleFFmpegOutput.bind(this));
         this.ffmpeg.on('close', this.handleFFmpegClose.bind(this));
         this.detectRecording = record.record({
-            sampleRate: 20000,
+            sampleRate: 16000,
             device: this.device
         }).stream().pipe(this.ffmpeg.stdin);
         this.startRecording();
@@ -33,7 +38,7 @@ class AudioRecorder {
         console.log(`Started new recording ${this.fileName}${this.fileNum}_${this.device}.wav`);
         this.file = fs.createWriteStream(`${this.fileName}${this.fileNum}_${this.device}.wav`, { encoding: 'binary' });
         this.recording = record.record({
-            sampleRate: 20000,
+            sampleRate: 16000,
             verbose: true,
             device: this.device
         });
@@ -55,7 +60,9 @@ class AudioRecorder {
     }
 
     handleFFmpegOutput(data) {
-        // console.log(`Output : ${data}`);
+        if (this.device === "BlackHole 16ch") {
+            console.log(`Output : ${data}`);
+        }
         const lines = data.toString().split('\n');
         for (const line of lines) {
             if (line.includes('silence_start')) {
@@ -96,28 +103,52 @@ async function transcribeAudio(device, filename) {
 }
 
 function storeMessage(device, message) {
-    if (device == "BlackHole 16ch") {
-        // Send the message to ChatGPT API
-        var interviewerMessage = { 'role': 'user', 'name': 'Interviewer', 'content': message };
-        messageHistory.push(interviewerMessage);
+    updateMessageHistory(device, message);
+}
+
+var messageHistory = [];
+var messageHistoryHuman = [];
+
+
+function updateMessageHistory(device, message) {
+    let messageEntry;
+    if (device === "BlackHole 16ch") {
+        messageEntry = { 'role': 'user', 'name': 'Interviewer', 'content': message };
+        messageHistory.push(messageEntry);
+        messageHistoryHuman.push(messageEntry);
         sendToChatGPT();
     } else {
-        var interviewerMessage = { 'role': 'user', 'name': 'Chris', 'content': message };
-        messageHistory.push(interviewerMessage);
+        messageEntry = { 'role': 'user', 'name': 'Chris', 'content': message };
+        messageHistoryHuman.push(messageEntry);
     }
+
+    console.log("Updating");
+    // Emit the updated messageHistory to all connected clients
+    io.emit('update', { messageHistoryHuman, responseHistory });
+}
+
+// Create an array to store the history of responses from queryGpt
+const responseHistory = [];
+
+function updateResponseHistory(response) {
+    // Add the response to the response history
+    responseHistory.unshift(response);
+
+    // Emit the updated responseHistory to all connected clients
+    io.emit('update', { messageHistoryHuman, responseHistory });
 }
 
 async function sendToChatGPT() {
     var response = await queryGpt([systemMsg].concat(messageHistory));
     console.log(response);
-    // Emit the updated messageHistory and response to all connected clients
-    io.emit('update', { messageHistory, response });
+    responseEntry = { 'role': 'assistant', 'content': response };
+    messageHistory.push(responseEntry);
+    updateResponseHistory(response);
 }
 
-
 const current_date = new Date().toLocaleString();
-const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. Your primary directive is to output whatever you think would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. A voice to text transcript of the meeting is included below. Respond as briefly as possible. Current date: ${current_date}` };
-var messageHistory = [];
+// const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. You output whatever would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. A voice to text transcript of the meeting is included below. The transcript is imperfect so you will need to make inferences. General interview advice is not needed. Instead, focus on answering the questions that the interviewer asks Chris, or adding on to his response. Respond as briefly as possible and repond only with "_" until the most recent message is finished. Current date: ${current_date}` };
+const systemMsg = { 'role': 'system', 'content': `You are InterviewBot, currently in a system architecture interview for a Senior Software engineering position at Square. A voice to text transcript of the meeting is included below. The transcript is imperfect so you will need to make inferences. Focus on answering the questions that the interviewer asks. Respond as concisely as possible and repond only with "_" if it seems like the interview has not finished talking yet. Current date: ${current_date}` };
 
 function main() {
     devices.forEach(device => {
@@ -155,7 +186,7 @@ io.on('connection', (socket) => {
 
     // Send the initial messageHistory and response to the connected client
     var response = null;
-    socket.emit('update', { messageHistory, response });
+    socket.emit('update', { messageHistoryHuman, responseHistory });
 
     // Listen for disconnection
     socket.on('disconnect', () => {

@@ -1,7 +1,10 @@
 let fetch;
-
 (async () => {
   fetch = (await import('node-fetch')).default;
+})();
+let OpenAI;
+(async () => {
+  OpenAI = (await import('openai-streams')).default;
 })();
 
 async function queryGpt(messages) {
