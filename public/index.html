@@ -34,9 +34,21 @@
       element.scrollTop = 0;
     }
 
+    var lastElement = document.createElement('p');
+    const interviewAdvice = document.getElementById('response-history');
+    lastElement.textContent = "Good luck on your interview.";
+    interviewAdvice.appendChild(lastElement);
+
     socket.on('append', (data) =>{
       const interviewAdvice = document.getElementById('response-history');
-      interviewAdvice.innerHTML = interviewAdvice.innerHTML + data;
+      if(data == "ENDING"){
+        const messageElement = document.createElement('p');
+        lastElement = messageElement;
+        interviewAdvice.appendChild(messageElement);
+      } else {
+        lastElement.textContent = lastElement.textContent + data;
+      }
+      scrollToBottom(interviewAdvice);
     });
     // Update the transcript and response history whenever there is new data from the server
     socket.on('update', (data) => {

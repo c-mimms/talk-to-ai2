@@ -136,6 +136,7 @@ function updateMessageHistory(device, message) {
 
     console.log("Updating");
     // Emit the updated messageHistory to all connected clients
+    io.emit('append', "ENDING");
     io.emit('update', { messageHistoryHuman, responseHistory });
 }
 
