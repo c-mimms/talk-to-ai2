@@ -1,8 +1,20 @@
-const { spawn, exec } = require('child_process');
-const fs = require('fs');
-const record = require('node-record-lpcm16');
-const axios = require('axios');
-const queryGpt = require('./gpt.js').queryGpt;
+// const { spawn, exec } = require('child_process');
+import {spawn, exec} from 'child_process';
+// const fs = require('fs');
+import fs from 'fs';
+// const record = require('node-record-lpcm16');
+import record from 'node-record-lpcm16';
+// const axios = require('axios');
+import 'axios';
+// const queryGpt = require('./gpt.js').queryGpt;
+// const streamGpt = require('./gpt.js').streamGpt;
+import {queryGpt, streamGpt} from './gpt.js';
+import express from 'express';
+import http from 'http';
+import {Server} from 'socket.io';
+// const express = require('express');
+// const http = require('http');
+// const socketIO = require('socket.io');
 
 
 const devices = ["BlackHole 16ch", "default"];
@@ -139,11 +151,11 @@ function updateResponseHistory(response) {
 }
 
 async function sendToChatGPT() {
-    var response = await queryGpt([systemMsg].concat(messageHistory));
-    console.log(response);
-    responseEntry = { 'role': 'assistant', 'content': response };
-    messageHistory.push(responseEntry);
-    updateResponseHistory(response);
+    var messages = [systemMsg].concat(messageHistory);
+    // var response = await queryGpt(messages);
+    streamGpt(messages, (data) => {
+        io.emit('append', data);
+    })
 }
 
 const current_date = new Date().toLocaleString();
@@ -159,10 +171,6 @@ function main() {
 
 main();
 
-const express = require('express');
-const http = require('http');
-const socketIO = require('socket.io');
-
 // Create an express app
 const app = express();
 
@@ -170,7 +178,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Create a socket.io server attached to the HTTP server
-const io = socketIO(server);
+const io = new Server(server);
 
 // Serve the static files (HTML, CSS, JS) from the "public" directory
 app.use(express.static('public'));

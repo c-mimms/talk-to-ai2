@@ -34,13 +34,17 @@
       element.scrollTop = 0;
     }
 
+    socket.on('append', (data) =>{
+      const interviewAdvice = document.getElementById('response-history');
+      interviewAdvice.innerHTML = interviewAdvice.innerHTML + data;
+    });
     // Update the transcript and response history whenever there is new data from the server
     socket.on('update', (data) => {
       const { messageHistoryHuman, responseHistory } = data;
       const transcript = document.getElementById('transcript');
       const interviewAdvice = document.getElementById('response-history');
       transcript.innerHTML = '';
-      interviewAdvice.innerHTML = '';
+      //interviewAdvice.innerHTML = '';
 
       // Display messageHistory
       messageHistoryHuman.forEach(message => {
@@ -53,12 +57,12 @@
       scrollToBottom(transcript);
 
       // Display response from queryGpt
-      responseHistory.forEach(message => {
-        const messageElement = document.createElement('p');
-        messageElement.textContent = `ChatGPT: ${message}`;
-        interviewAdvice.prepend(messageElement);
-      });
-      scrollToTop(interviewAdvice);
+      //responseHistory.forEach(message => {
+      //  const messageElement = document.createElement('p');
+      //  messageElement.textContent = `ChatGPT: ${message}`;
+      //  interviewAdvice.prepend(messageElement);
+      //});
+      //scrollToTop(interviewAdvice);
     });
   </script>
 
