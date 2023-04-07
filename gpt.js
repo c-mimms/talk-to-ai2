@@ -1,18 +1,14 @@
-// var fetch;
-// (async () => {
-//   fetch = (await import('node-fetch')).default;
-// })();
 import 'node-fetch';
 import { createParser } from 'eventsource-parser'
 
 const url = 'https://api.openai.com/v1/chat/completions';
 
 export async function queryGpt(messages) {
-  return gpt(messages, 'gpt-3.5-turbo', 0.7, 1000);
-  // return gpt(messages, 'gpt-4', 0.7, 500);
-}
+  var model = 'gpt-3.5-turbo';
+  // var model = 'gpt-4';
+  var temperature = 0.7;
+  var maxTokens = 1000;
 
-async function gpt(messages, model, temperature, maxTokens) {
   const params = { model, messages, temperature, max_tokens: maxTokens };
   const headers = {
     Authorization: `Bearer redacted`,
@@ -40,20 +36,16 @@ export async function streamGpt(messages, callback) {
     {
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer redacted`
+        "Authorization": `Bearer SECRET`
       },
       method: "POST",
       body: JSON.stringify({
-        model: "gpt-4",
+        // model: "gpt-4",
+        model: 'gpt-3.5-turbo',
         messages: messages,
         temperature: 0.75,
-        // top_p: 0.95,
-        // stop: ["\n\n"],
-        // frequency_penalty: 0,
-        // presence_penalty: 0,
         max_tokens: 500,
         stream: true,
-        // n: 1,
       }),
     });
 
@@ -66,7 +58,6 @@ export async function streamGpt(messages, callback) {
     }
   });
   for await (const value of response.body?.pipeThrough(new TextDecoderStream())) {
-    // console.log("Received", value);
     parser.feed(value);
   }
 }
@@ -74,7 +65,6 @@ export async function streamGpt(messages, callback) {
 function onParse(event) {
   if (event.type === 'event') {
     if (event.data !== "[DONE]") {
-      // console.log( JSON.parse(event.data).choices[0].delta?.content || "")
       return JSON.parse(event.data).choices[0].delta?.content || "";
     }
   } else if (event.type === 'reconnect-interval') {

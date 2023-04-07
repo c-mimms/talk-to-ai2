@@ -1,24 +1,60 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Interview Transcript</title>
+  <title>Talk to GPT</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    .container {
-      padding: 20px;
-      border: 1px solid #ccc;
-      margin: 10px;
-      height: 300px; /* Set a fixed height for the container */
-      overflow-y: auto; /* Enable a scrollbar when the content exceeds the height */
+    body {
+      font-family: 'Comfortaa';
+      font-size: 24px;
+      color: #FFE6C7;
+      background-color: #454545;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
+
+    .container {
+      position: relative;
+      top: 0px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 20px;
+      height: 100%;
+      overflow-y: auto;
+    }
+
+    .system-message-container {
+      display: flex;
+      justify-content: center;
+      margin-top: 20px;
+      width: 90%;
+      padding: 0 20px;
+    }
+
+    .system-message-input {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #FFA559;
+      border-radius: 5px;
+      font-size: 14px;
+      background-color: #454545;
+      color: #FFE6C7;
+      outline: none;
+      resize: none;
+      overflow: hidden;
+    }
+
   </style>
 </head>
 <body>
-  <h1>Interview Transcript</h1>
+  <div class="system-message-container">
+    <textarea id="system-message" class="system-message-input" rows="1">You are VoiceGPT, a voice powered assistant. Current date: 2023-04-06</textarea>
+  </div>
   <div id="transcript" class="container"></div>
-
-  <h1>Interview AI Suggestions</h1>
-  <div id="response-history" class="container"></div>
 
   <script>
     // Connect to the socket.io server
@@ -29,52 +65,59 @@
       element.scrollTop = element.scrollHeight;
     }
 
-    // Function to scroll the specified element to the top
-    function scrollToTop(element) {
-      element.scrollTop = 0;
+    const transcript = document.getElementById('transcript');
+    const systemMessageInput = document.getElementById('system-message');
+
+    systemMessageInput.addEventListener('change', () => {
+      socket.emit('changeSystemMsg', systemMessageInput.value);
+    });
+
+    function autoResize(element) {
+      element.style.height = 'auto';
+      element.style.height = (element.scrollHeight) + 'px';
+      var viewportHeight = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+
+      // Set maximum height of transcript element
+      var transcript = document.getElementById("transcript");
+      var maxHeight = viewportHeight - element.offsetHeight - 40;
+      transcript.style.maxHeight = maxHeight + "px";
+      transcript.style.overflowY = "scroll";
     }
 
-    var lastElement = document.createElement('p');
-    const interviewAdvice = document.getElementById('response-history');
-    lastElement.textContent = "Good luck on your interview.";
-    interviewAdvice.appendChild(lastElement);
+    systemMessageInput.addEventListener('input', () => {
+      autoResize(systemMessageInput);
+    });
+
+    // Call autoResize once to set initial height
+    autoResize(systemMessageInput);
+
+
+    var lastResponse = document.createElement('p');
+    transcript.appendChild(lastResponse);
 
     socket.on('append', (data) =>{
-      const interviewAdvice = document.getElementById('response-history');
       if(data == "ENDING"){
-        const messageElement = document.createElement('p');
-        lastElement = messageElement;
-        interviewAdvice.appendChild(messageElement);
+        lastResponse = document.createElement('p');
+        transcript.appendChild(lastResponse);
       } else {
-        lastElement.textContent = lastElement.textContent + data;
+        lastResponse.textContent = lastResponse.textContent + data;
       }
-      scrollToBottom(interviewAdvice);
+      scrollToBottom(transcript);
     });
+
     // Update the transcript and response history whenever there is new data from the server
-    socket.on('update', (data) => {
-      const { messageHistoryHuman, responseHistory } = data;
-      const transcript = document.getElementById('transcript');
-      const interviewAdvice = document.getElementById('response-history');
+    socket.on('update', (messageHistory) => {
       transcript.innerHTML = '';
-      //interviewAdvice.innerHTML = '';
 
       // Display messageHistory
-      messageHistoryHuman.forEach(message => {
+      messageHistory.forEach(message => {
         const messageElement = document.createElement('p');
-        messageElement.textContent = `${message.name}: ${message.content}`;
+        messageElement.textContent = `${message.role}: ${message.content}`;
         transcript.appendChild(messageElement);
       });
 
       // Scroll the transcript div to the bottom
       scrollToBottom(transcript);
-
-      // Display response from queryGpt
-      //responseHistory.forEach(message => {
-      //  const messageElement = document.createElement('p');
-      //  messageElement.textContent = `ChatGPT: ${message}`;
-      //  interviewAdvice.prepend(messageElement);
-      //});
-      //scrollToTop(interviewAdvice);
     });
   </script>
 

@@ -1,23 +1,18 @@
-// const { spawn, exec } = require('child_process');
-import {spawn, exec} from 'child_process';
-// const fs = require('fs');
+import { spawn, exec } from 'child_process';
 import fs from 'fs';
-// const record = require('node-record-lpcm16');
 import record from 'node-record-lpcm16';
-// const axios = require('axios');
 import 'axios';
-// const queryGpt = require('./gpt.js').queryGpt;
-// const streamGpt = require('./gpt.js').streamGpt;
-import {queryGpt, streamGpt} from './gpt.js';
+import { streamGpt } from './gpt.js';
 import express from 'express';
 import http from 'http';
-import {Server} from 'socket.io';
-// const express = require('express');
-// const http = require('http');
-// const socketIO = require('socket.io');
+import { Server } from 'socket.io';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-const devices = ["BlackHole 16ch", "default"];
+var messageHistory = [];
 
 class AudioRecorder {
     constructor(device) {
@@ -28,16 +23,11 @@ class AudioRecorder {
         this.file = null;
         this.recording = null;
         this.audioStream = null;
-        if (device === "BlackHole 16ch") {
-            this.ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-50dB:d=1', '-f', 'null', '-']);
-        } else {
-            this.ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-30dB:d=1', '-f', 'null', '-']);
-        }
+        this.ffmpeg = spawn('ffmpeg', ['-i', '-', '-af', 'silencedetect=n=-20dB:d=1', '-f', 'null', '-']);
     }
 
     init() {
         this.ffmpeg.stderr.on('data', this.handleFFmpegOutput.bind(this));
-        this.ffmpeg.on('close', this.handleFFmpegClose.bind(this));
         this.detectRecording = record.record({
             sampleRate: 16000,
             device: this.device
@@ -47,7 +37,6 @@ class AudioRecorder {
 
     startRecording() {
         this.fileNum++;
-        console.log(`Started new recording ${this.fileName}${this.fileNum}_${this.device}.wav`);
         this.file = fs.createWriteStream(`${this.fileName}${this.fileNum}_${this.device}.wav`, { encoding: 'binary' });
         this.recording = record.record({
             sampleRate: 16000,
@@ -68,13 +57,10 @@ class AudioRecorder {
     async onSilenceDetected() {
         this.stopRecording();
         this.startRecording();
-        transcribeAudio(this.device, `${this.fileName}${this.fileNum - 1}_${this.device}.wav`);
+        transcribeAudio(`${this.fileName}${this.fileNum - 1}_${this.device}.wav`);
     }
 
     handleFFmpegOutput(data) {
-        if (this.device === "BlackHole 16ch") {
-            console.log(`Output : ${data}`);
-        }
         const lines = data.toString().split('\n');
         for (const line of lines) {
             if (line.includes('silence_start')) {
@@ -82,10 +68,6 @@ class AudioRecorder {
                 break;
             }
         }
-    }
-
-    handleFFmpegClose(code) {
-        console.log(`ffmpeg process exited with code ${code}`);
     }
 }
 
@@ -106,83 +88,55 @@ function stripBrackets(line) {
     return line.toString().replace(/\[.*\]/g, '').replace(/\n/g, ' ');
 }
 
-async function transcribeAudio(device, filename) {
+async function transcribeAudio(filename) {
     const command = `whisper "${filename}" --model tiny.en --language English --fp16 False --output_dir ./trash`;
     const transcription = await evaluateCommand(command);
-    const stripped = stripBrackets(transcription);
-    console.log(`${device} :  ${stripped}`);
-    storeMessage(device, stripped);
-}
-
-function storeMessage(device, message) {
-    updateMessageHistory(device, message);
-}
-
-var messageHistory = [];
-var messageHistoryHuman = [];
-
-
-function updateMessageHistory(device, message) {
-    let messageEntry;
-    if (device === "BlackHole 16ch") {
-        messageEntry = { 'role': 'user', 'name': 'Interviewer', 'content': message };
-        messageHistory.push(messageEntry);
-        messageHistoryHuman.push(messageEntry);
-        sendToChatGPT();
-    } else {
-        messageEntry = { 'role': 'user', 'name': 'Chris', 'content': message };
-        messageHistoryHuman.push(messageEntry);
+    const strippedMessage = stripBrackets(transcription);
+    if (strippedMessage.length > 5) {
+        updateMessageHistory(strippedMessage);
     }
+}
 
-    console.log("Updating");
+function updateMessageHistory(message) {
+    let messageEntry = { 'role': 'user', 'content': message };
+    messageHistory.push(messageEntry);
+    sendToChatGPT();
+
     // Emit the updated messageHistory to all connected clients
-    io.emit('append', "ENDING");
-    io.emit('update', { messageHistoryHuman, responseHistory });
+    io.emit('update', messageHistory);
 }
 
 // Create an array to store the history of responses from queryGpt
 const responseHistory = [];
 
-function updateResponseHistory(response) {
-    // Add the response to the response history
-    responseHistory.unshift(response);
-
-    // Emit the updated responseHistory to all connected clients
-    io.emit('update', { messageHistoryHuman, responseHistory });
-}
-
 async function sendToChatGPT() {
     var messages = [systemMsg].concat(messageHistory);
-    // var response = await queryGpt(messages);
+    var response = '';
     streamGpt(messages, (data) => {
         io.emit('append', data);
-    })
-}
-
-const current_date = new Date().toLocaleString();
-// const systemMsg = { 'role': 'system', 'content': `You are InterviewBot. You output whatever would be most helpful to Chris, who is currently interviewing for a Senior Software engineering position at Square. A voice to text transcript of the meeting is included below. The transcript is imperfect so you will need to make inferences. General interview advice is not needed. Instead, focus on answering the questions that the interviewer asks Chris, or adding on to his response. Respond as briefly as possible and repond only with "_" until the most recent message is finished. Current date: ${current_date}` };
-const systemMsg = { 'role': 'system', 'content': `You are InterviewBot, currently in a system architecture interview for a Senior Software engineering position at Square. A voice to text transcript of the meeting is included below. The transcript is imperfect so you will need to make inferences. Focus on answering the questions that the interviewer asks. Respond as concisely as possible and repond only with "_" if it seems like the interview has not finished talking yet. Current date: ${current_date}` };
-
-function main() {
-    devices.forEach(device => {
-        var devRec = new AudioRecorder(device);
-        devRec.init();
+        response = response + data;
+    }).then(() => {
+        io.emit('append', 'ENDING');
+        messageHistory.push({ 'role': 'assistant', 'content': response });
+        responseHistory.push(response);
+        io.emit('update', messageHistory);
     });
 }
 
-main();
+const current_date = new Date().toLocaleString();
+const systemMsg = { 'role': 'system', 'content': `You are VoiceGPT, a voice powered assistant. Current date: ${current_date}` };
+
+//Start listening to default audio input
+var devRec = new AudioRecorder("default");
+devRec.init();
 
 // Create an express app
 const app = express();
-
-// Create an HTTP server using the express app
-const server = http.createServer(app);
+app.use(express.static('public'));
 
 // Create a socket.io server attached to the HTTP server
+const server = http.createServer(app);
 const io = new Server(server);
-
-// Serve the static files (HTML, CSS, JS) from the "public" directory
-app.use(express.static('public'));
 
 // Define a route to serve the web page
 app.get('/', (req, res) => {
@@ -195,12 +149,16 @@ io.on('connection', (socket) => {
 
     // Send the initial messageHistory and response to the connected client
     var response = null;
-    socket.emit('update', { messageHistoryHuman, responseHistory });
+    socket.emit('update', messageHistory);
 
     // Listen for disconnection
     socket.on('disconnect', () => {
         console.log('A user disconnected');
     });
+
+    socket.on('changeSystemMsg', (newSystemMsg) => {
+        systemMsg.content = newSystemMsg;
+      });
 });
 
 // Start the server on port 3000
