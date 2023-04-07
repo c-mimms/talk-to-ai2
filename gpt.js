@@ -1,5 +1,8 @@
 import 'node-fetch';
 import { createParser } from 'eventsource-parser'
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const url = 'https://api.openai.com/v1/chat/completions';
 
@@ -11,7 +14,7 @@ export async function queryGpt(messages) {
 
   const params = { model, messages, temperature, max_tokens: maxTokens };
   const headers = {
-    Authorization: `Bearer redacted`,
+    Authorization: `Bearer ${process.env.API_KEY}`,
     'Content-Type': 'application/json',
   };
 
@@ -36,7 +39,7 @@ export async function streamGpt(messages, callback) {
     {
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer SECRET`
+        "Authorization": `Bearer ${process.env.API_KEY}`
       },
       method: "POST",
       body: JSON.stringify({

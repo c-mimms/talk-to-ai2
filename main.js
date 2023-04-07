@@ -3,7 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { streamGpt } from './gpt.js';
+import { queryGpt, streamGpt } from './gpt.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -78,3 +78,5 @@ io.on('connection', (socket) => {
 server.listen(3000, () => {
   console.log('Server is running on http://localhost:3000');
 });
+
+queryGpt(messageHistory);
