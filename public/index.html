@@ -31,7 +31,7 @@
       display: flex;
       justify-content: center;
       margin-top: 20px;
-      width: 90%;
+      width: 95%;
       padding: 0 20px;
     }
 
@@ -48,11 +48,63 @@
       overflow: hidden;
     }
 
+    .voice-control-container {
+      display: flex;
+      align-items: center;
+      margin-left: 10px;
+    }
+    .custom-checkbox {
+      position: relative;
+      width: 18px;
+      height: 18px;
+      border: 2px solid #FFA559;
+      border-radius: 3px;
+      background-color: #454545;
+      cursor: pointer;
+    }
+    .custom-checkbox.checked::before {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 10px;
+      height: 10px;
+      background-color: #FFA559;
+      border-radius: 2px;
+    }
+    .voice-checkbox-label {
+      color: #FFE6C7;
+      margin: 5px;
+      font-size: 14px;
+    }
+    #voiceCheckbox {
+      display: none;
+    }
+    #voiceSelect {
+      height: 3em;
+      width: 100px;
+      margin: 5px;
+      padding: 5px;
+      border: 2px solid #FFA559;
+      border-radius: 5px;
+      font-size: 14px;
+      background-color: #454545;
+      color: #FFE6C7;
+      outline: none;
+    }
+
   </style>
 </head>
 <body>
   <div class="system-message-container">
     <textarea id="system-message" class="system-message-input" rows="1">You are VoiceGPT, a voice powered assistant. Current date: 2023-04-06</textarea>
+
+    <div class="voice-control-container">
+      <select id="voiceSelect" style="display: none;"></select>
+      <label class="voice-checkbox-label" for="voiceCheckbox">Voice</label>
+      <div class="custom-checkbox" id="customCheckbox"></div>
+      <input type="checkbox" id="voiceCheckbox">
+    </div>
   </div>
   <div id="transcript" class="container"></div>
 
@@ -70,6 +122,42 @@
 
     systemMessageInput.addEventListener('change', () => {
       socket.emit('changeSystemMsg', systemMessageInput.value);
+    });
+
+    // Function to populate the voice selection dropdown with available voices
+    function populateVoiceList() {
+      const voiceSelect = document.getElementById('voiceSelect');
+      const voices = window.speechSynthesis.getVoices();
+      voices.forEach((voice) => {
+        const option = document.createElement('option');
+        option.textContent = voice.name;
+        option.value = voice.name;
+        voiceSelect.appendChild(option);
+      });
+    }
+
+    // Function to convert text to speech using the SpeechSynthesis API
+    function speakText(text) {
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voiceCheckbox = document.getElementById('voiceCheckbox');
+      const voiceSelect = document.getElementById('voiceSelect');
+      if (voiceCheckbox.checked) {
+        const selectedVoiceName = voiceSelect.value;
+        const voices = synth.getVoices();
+        const selectedVoice = voices.find(voice => voice.name === selectedVoiceName);
+        utterance.voice = selectedVoice;
+      }
+      synth.speak(utterance);
+    }
+
+    const customCheckbox = document.getElementById('customCheckbox');
+    const voiceCheckbox = document.getElementById('voiceCheckbox');
+    const voiceSelect = document.getElementById('voiceSelect');
+    customCheckbox.addEventListener('click', () => {
+      voiceCheckbox.checked = !voiceCheckbox.checked;
+      customCheckbox.classList.toggle('checked', voiceCheckbox.checked);
+      voiceSelect.style.display = voiceCheckbox.checked ? 'block' : 'none';
     });
 
     function autoResize(element) {
@@ -105,6 +193,29 @@
       scrollToBottom(transcript);
     });
 
+
+    // Initialize SpeechRecognition API
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event) => {
+      const speechResult = event.results[0][0].transcript;
+      socket.emit('speechResult', speechResult);
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+    };
+
+    recognition.onend = () => {
+      recognition.start();
+    };
+
+    recognition.start();
+
     // Update the transcript and response history whenever there is new data from the server
     socket.on('update', (messageHistory) => {
       transcript.innerHTML = '';
@@ -116,9 +227,24 @@
         transcript.appendChild(messageElement);
       });
 
+    // Get the last message from the messageHistory
+    const lastMessage = messageHistory[messageHistory.length - 1];
+
+    // If the last message is from the assistant, convert it to speech
+    if (lastMessage && lastMessage.role === 'assistant') {
+      speakText(lastMessage.content);
+    }
+
       // Scroll the transcript div to the bottom
       scrollToBottom(transcript);
     });
+
+
+    // Populate the voice selection dropdown
+    populateVoiceList();
+    // If the browser's voices change (e.g., due to a new voice being added), repopulate the voice selection dropdown
+    window.speechSynthesis.onvoiceschanged = populateVoiceList;
+
   </script>
 
 </body>
