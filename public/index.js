@@ -75,7 +75,7 @@ socket.on('append', (data) =>{
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = new SpeechRecognition();
-recognition.lang = 'en-US';
+recognition.lang = 'sv-SE';
 recognition.interimResults = false;
 recognition.maxAlternatives = 1;
 

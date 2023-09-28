@@ -23,7 +23,7 @@ function updateMessageHistory(message) {
 const responseHistory = [];
 
 async function sendToChatGPT() {
-    var messages = [systemMsg].concat(messageHistory);
+    var messages = [systemMsg].concat(messageHistory.slice(-1)[0] );
     var response = '';
     streamGpt(messages, (data) => {
         io.emit('append', data);
